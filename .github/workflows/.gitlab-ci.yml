@@ -40,12 +40,3 @@ jobs:
     - name: Push Docker image to DockerHub
       run: docker push ${{ secrets.DOCKER_USERNAME }}/flask-docker-example:latest
 
-    # Шаг 7: Деплой на сервер
-    - name: Deploy to server
-      run: |
-        ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
-          docker pull ${{ secrets.DOCKER_USERNAME }}/flask-docker-example:latest
-          docker stop flask_app || true
-          docker rm flask_app || true
-          docker run -d --name flask_app -p 5000:5000 ${{ secrets.DOCKER_USERNAME }}/flask-docker-example:latest
-        EOF
