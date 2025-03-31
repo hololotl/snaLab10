@@ -1,38 +1,51 @@
-stages:
-  - build
-  - test
-  - publish
-  - deploy
+name: Dockerized Flask App CI/CD
 
-variables:
-  DOCKER_IMAGE: "lab10ex5/flask-app"
-  DOCKER_TAG: "latest"
+on:
+  push:
+    branches:
+      - main
 
-build:
-  stage: build
-  script:
-    - docker build -t $DOCKER_IMAGE:$DOCKER_TAG .
-  artifacts:
-    paths:
-      - ./
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-test:
-  stage: test
-  script:
-    - docker run $DOCKER_IMAGE:$DOCKER_TAG python -m unittest test_app.py
+    steps:
+    # Шаг 1: Проверка кода из репозитория
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-publish:
-  stage: publish
-  script:
-    - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-    - docker push $DOCKER_IMAGE:$DOCKER_TAG
-  only:
-    - main
+    # Шаг 2: Установка Python и зависимостей
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: |
+        pip install flask pytest
 
-deploy:
-  stage: deploy
-  script:
-    - echo "Deploying to server..."
-    - ssh user@server "docker pull $DOCKER_IMAGE:$DOCKER_TAG && docker run -d -p 5000:5000 $DOCKER_IMAGE:$DOCKER_TAG"
-  only:
-    - main
+    # Шаг 3: Запуск тестов
+    - name: Run tests
+      run: |
+        pytest test_app.py
+
+    # Шаг 4: Логин в DockerHub
+    - name: Log in to DockerHub
+      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+    # Шаг 5: Сборка Docker-образа
+    - name: Build Docker image
+      run: docker build -t ${{ secrets.DOCKER_USERNAME }}/flask-docker-example:latest .
+
+    # Шаг 6: Публикация Docker-образа на DockerHub
+    - name: Push Docker image to DockerHub
+      run: docker push ${{ secrets.DOCKER_USERNAME }}/flask-docker-example:latest
+
+    # Шаг 7: Деплой на сервер
+    - name: Deploy to server
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+          docker pull ${{ secrets.DOCKER_USERNAME }}/flask-docker-example:latest
+          docker stop flask_app || true
+          docker rm flask_app || true
+          docker run -d --name flask_app -p 5000:5000 ${{ secrets.DOCKER_USERNAME }}/flask-docker-example:latest
+        EOF
